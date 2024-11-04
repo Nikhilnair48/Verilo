@@ -27,3 +27,28 @@ export async function saveBrowsingData(data: BrowsingData) {
   console.log(data);
   transaction.objectStore(STORE_NAME).put(data);
 }
+
+export function getBrowsingData(): Promise<{ url: string; timeSpent: number }[]> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME);
+
+    request.onsuccess = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      const transaction = db.transaction("browsingData", "readonly");
+      const store = transaction.objectStore("browsingData");
+      const data: { url: string; timeSpent: number }[] = [];
+
+      store.openCursor().onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          data.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(data);
+        }
+      };
+    };
+
+    request.onerror = () => reject("Error accessing IndexedDB");
+  });
+}
