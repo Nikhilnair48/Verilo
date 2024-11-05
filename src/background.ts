@@ -1,21 +1,5 @@
 import { openDatabase, BrowsingData } from "./db/database";
-import { encryptData } from "./utils/encryption";
 import { uploadToGoogleDrive } from "./utils/drive";
-
-// Function to retrieve or generate an AES-GCM encryption key
-async function getEncryptionKey(): Promise<CryptoKey> {
-  const storedKey = await chrome.storage.local.get("encryptionKey");
-
-  if (storedKey.encryptionKey) {
-    const keyBuffer = new Uint8Array(storedKey.encryptionKey).buffer;
-    return await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
-  } else {
-    const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-    const exportedKey = new Uint8Array(await crypto.subtle.exportKey("raw", key));
-    await chrome.storage.local.set({ encryptionKey: Array.from(exportedKey) });
-    return key;
-  }
-}
 
 // Function to retrieve browsing data from IndexedDB
 async function retrieveBrowsingData(): Promise<BrowsingData[]> {
