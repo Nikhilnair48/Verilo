@@ -1,61 +1,82 @@
 import { saveBrowsingData } from "./db/database";
 
-// Categories to track (as examples)
-const CATEGORIES = {
-  SOCIAL_MEDIA: ["facebook.com", "twitter.com", "instagram.com"],
-  NEWS: ["cnn.com", "bbc.com", "nytimes.com"]
-};
-
-// Helper function to determine the category based on URL
-function determineCategory(url: string): string | null {
-  for (const [category, sites] of Object.entries(CATEGORIES)) {
-    if (sites.some(site => url.includes(site))) {
-      return category;
-    }
-  }
-  return null;
-}
-
-// Track time on a website
-let currentCategory: string | null = null;
+// State variables for tracking
+let trackingCategory: string | null = null;
+let trackingDomainId: string | null = null;
 let startTime: number | null = null;
+let intervalId: number | null = null;
 
-// Start tracking when the tab becomes active
-function startTracking(category: string) {
-  currentCategory = category;
+// Function to start tracking for the specified domain and category
+function startTracking(category: string, domainId: string) {
+  if (intervalId !== null) return;
+
+  trackingCategory = category;
+  trackingDomainId = domainId;
   startTime = Date.now();
-  console.log(`Started tracking ${category} at ${new Date(startTime).toLocaleTimeString()}`)
+  console.log(`Started tracking ${domainId} in ${category}`);
+
+  intervalId = window.setInterval(async () => {
+    if (trackingCategory && trackingDomainId && startTime) {
+      const now = Date.now();
+      const duration = Math.floor((now - startTime) / 1000);
+      await saveCurrentDuration(duration);
+      startTime = now;
+    }
+  }, 30000);
 }
 
-// Stop tracking and save the data
+// Function to stop tracking and save data
 async function stopTracking() {
-  if (currentCategory && startTime) {
-    const endTime = Date.now();
-    const duration = Math.floor((endTime - startTime) / 1000); // duration in seconds
+  if (intervalId !== null) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
 
-    const today = new Date().toISOString().split("T")[0];
-    await saveBrowsingData({
-      id: `${today}-${currentCategory}`,
-      date: today,
-      categories: { [currentCategory]: duration }
-    });
+  if (trackingCategory && trackingDomainId && startTime) {
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    await saveCurrentDuration(duration);
 
-    // Reset tracking
-    currentCategory = null;
+    trackingCategory = null;
+    trackingDomainId = null;
     startTime = null;
   }
 }
 
-// Listen for tab activity changes
-window.addEventListener("focus", () => {
-  const category = determineCategory(window.location.hostname);
-  console.log(category);
-  if (category) {
-    startTracking(category);
+// Helper function to save duration to IndexedDB
+async function saveCurrentDuration(duration: number) {
+  const timestamp = Date.now();
+  const date = new Date(timestamp).toISOString().split('T')[0];
+  if (trackingCategory && trackingDomainId) {
+    await saveBrowsingData({
+      id: `${date}-${trackingDomainId}`,
+      date,
+      domainId: trackingDomainId,
+      duration,
+      visitCount: 1
+    });
+  }
+}
+
+// Detect when the tab becomes hidden or visible
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === 'hidden') {
+    stopTracking();
+  } else if (document.visibilityState === 'visible' && trackingCategory && trackingDomainId) {
+    startTracking(trackingCategory, trackingDomainId);
   }
 });
 
-window.addEventListener("blur", () => {
-  console.log("stop tracking");
+// Save on tab unload
+window.addEventListener("beforeunload", () => {
   stopTracking();
+});
+
+// Listen for messages from the background script to control tracking
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === 'startTracking' && message.category && message.domainId) {
+    stopTracking();
+    startTracking(message.category, message.domainId);
+  } else if (message.action === 'stopTracking') {
+    stopTracking();
+  }
 });
