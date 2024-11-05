@@ -22,46 +22,75 @@ export interface DomainInfo {
 
 // Open database with BrowsingData and DomainInfo tables
 export const openDatabase = async () => {
-  return await openDB('TrackingDatabase', 1, {
-    upgrade(db) {
-      const browsingStore = db.createObjectStore('browsingData', { keyPath: 'id' });
-      browsingStore.createIndex('date', 'date');
-      browsingStore.createIndex('domainId', 'domainId');
-
-      const domainStore = db.createObjectStore('domainInfo', { keyPath: 'domainId' });
-      domainStore.createIndex('domain', 'domain');
-    },
-  });
+  try {
+    return await openDB('TrackingDatabase', 1, {
+      upgrade(db) {
+        const browsingStore = db.createObjectStore('browsingData', { keyPath: 'id' });
+        browsingStore.createIndex('date', 'date');
+        browsingStore.createIndex('domainId', 'domainId');
+  
+        const domainStore = db.createObjectStore('domainInfo', { keyPath: 'domainId' });
+        domainStore.createIndex('domain', 'domain');
+      },
+    });
+  } catch(err) {
+    console.log(err);
+    return null;
+  }
 };
 
 // Add or update domain information
-export async function addDomainInfo(domain: string, category: string, subcategories: string[]): Promise<string> {
-  const db = await openDatabase();
-  const domainId = `${domain}-${category}`;
-  const existing = await db.get('domainInfo', domainId);
-
-  if (!existing) {
-    await db.put('domainInfo', { domainId, domain, category, subcategories });
+export async function addDomainInfo(domain: string, category: string, subcategories: string[]): Promise<string | null> {
+  try {
+    const db = await openDatabase();
+    if(db) {
+      const domainId = `${domain}-${category}`;
+      const existing = await db.get('domainInfo', domainId);
+    
+      if (!existing) {
+        await db.put('domainInfo', { domainId, domain, category, subcategories });
+      }
+      return domainId;
+    }
+    return null;
+  } catch(err) {
+    console.log(err);
+    return null;
   }
-  return domainId;
 }
 
 // Save browsing data with aggregation
 export async function saveBrowsingData({ id, date, domainId, duration, visitCount }: BrowsingData) {
-  const db = await openDatabase();
-  const existing = await db.get('browsingData', id);
-
-  if (existing) {
-    existing.duration += duration;
-    existing.visitCount += visitCount;
-    await db.put('browsingData', existing);
-  } else {
-    await db.put('browsingData', { id, date, domainId, duration, visitCount });
+  try {
+    const db = await openDatabase();
+    if(db) {
+      const existing = await db.get('browsingData', id);
+    
+      if (existing) {
+        existing.duration += duration;
+        existing.visitCount += visitCount;
+        await db.put('browsingData', existing);
+      } else {
+        await db.put('browsingData', { id, date, domainId, duration, visitCount });
+      }
+    }
+    return null;
+  } catch(err) {
+    console.log(err);
+    return null;
   }
 }
 
 // Fetch browsing data for reporting
-export async function getBrowsingDataByDate(date: string): Promise<BrowsingData[]> {
-  const db = await openDatabase();
-  return await db.getAllFromIndex('browsingData', 'date', date);
+export async function getBrowsingDataByDate(date: string): Promise<BrowsingData[] | null> {
+  try {
+    const db = await openDatabase();
+    if(db) {
+      return await db.getAllFromIndex('browsingData', 'date', date);
+    }
+    return null;
+  } catch(err) {
+    console.log(err);
+    return null;
+  }
 }
