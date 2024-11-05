@@ -7,12 +7,20 @@ let startTime: number | null = null;
 let intervalId: number | null = null;
 
 // Function to start tracking for the specified domain and category
-function startTracking(category: string, domainId: string) {
+async function startTracking(category: string, domainId: string) {
   if (intervalId !== null) return;
 
   trackingCategory = category;
   trackingDomainId = domainId;
   startTime = Date.now();
+
+  // Save to storage for persistence
+  await chrome.storage.local.set({
+    trackingCategory,
+    trackingDomainId,
+    startTime,
+  });
+
   console.log(`Started tracking ${domainId} in ${category}`);
 
   intervalId = window.setInterval(async () => {
@@ -21,6 +29,7 @@ function startTracking(category: string, domainId: string) {
       const duration = Math.floor((now - startTime) / 1000);
       await saveCurrentDuration(duration);
       startTime = now;
+      await chrome.storage.local.set({ startTime });
     }
   }, 30000);
 }
@@ -32,9 +41,20 @@ async function stopTracking() {
     intervalId = null;
   }
 
-  if (trackingCategory && trackingDomainId && startTime) {
-    const duration = Math.floor((Date.now() - startTime) / 1000);
+  const { trackingCategory: localTrackingCategory, trackingDomainId: localTrackingDomainId, startTime: localStartTime } = await chrome.storage.local.get([
+    "trackingCategory",
+    "trackingDomainId",
+    "startTime",
+  ]);
+
+  console.log(`trackingCategory: ${trackingCategory}, trackingDomainId: ${trackingDomainId}, startTime: ${startTime}`);
+
+  if (localTrackingCategory && localTrackingDomainId && localStartTime) {
+    const duration = Math.floor((Date.now() - localStartTime) / 1000);
     await saveCurrentDuration(duration);
+
+    // Clear storage
+    await chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime"]);
 
     trackingCategory = null;
     trackingDomainId = null;
@@ -44,6 +64,7 @@ async function stopTracking() {
 
 // Helper function to save duration to IndexedDB
 async function saveCurrentDuration(duration: number) {
+  console.log(`saveCurrentDuration: ${duration}`);
   const timestamp = Date.now();
   const date = new Date(timestamp).toISOString().split('T')[0];
   if (trackingCategory && trackingDomainId) {
@@ -54,6 +75,18 @@ async function saveCurrentDuration(duration: number) {
       duration,
       visitCount: 1
     });
+  }
+}
+
+async function restoreTrackingState() {
+  const { trackingCategory, trackingDomainId, startTime } = await chrome.storage.local.get([
+    "trackingCategory",
+    "trackingDomainId",
+    "startTime",
+  ]);
+
+  if (trackingCategory && trackingDomainId && startTime) {
+    startTracking(trackingCategory, trackingDomainId);
   }
 }
 
@@ -80,3 +113,5 @@ chrome.runtime.onMessage.addListener((message) => {
     stopTracking();
   }
 });
+
+restoreTrackingState();
