@@ -1,51 +1,5 @@
-import { getBrowsingDataByDate } from "./db/database";
-import { encryptData, getEncryptionKey } from "./utils/encryption";
-import { uploadToGoogleDrive } from "./utils/drive";
 import { addDomainInfo } from './db/database';
-
-// Function to retrieve browsing data from IndexedDB
-// async function retrieveBrowsingData(): Promise<BrowsingData[]> {
-//   const db = await openDatabase();
-//   const transaction = db.transaction("browsingData", "readonly");
-//   const store = transaction.objectStore("browsingData");
-
-//   return new Promise((resolve, reject) => {
-//     const request = store.getAll();
-//     request.onsuccess = () => {
-//       resolve(request.result as BrowsingData[]);
-//     };
-//     request.onerror = () => {
-//       reject("Failed to retrieve browsing data from IndexedDB");
-//     };
-//   });
-// }
-
-// Function to handle data encryption and upload to Google Drive
-async function syncDataToDrive() {
-  try {
-    const date = new Date().toISOString().split("T")[0]; // Use current date for sync
-    const browsingData = await getBrowsingDataByDate(date);
-
-
-    if (browsingData.length === 0) {
-      console.log("No data to sync.");
-      return;
-    }
-
-    // Encrypt data for upload
-    const encryptionKey = await getEncryptionKey();
-    const dataToUpload = JSON.stringify(browsingData);
-    const encryptedData = await encryptData(dataToUpload, encryptionKey);
-
-    // Define the file name
-    const fileName = `BrowsingSummary_${date}.json`;
-    await uploadToGoogleDrive(encryptedData, fileName);
-
-    console.log("Data successfully synced to Google Drive.");
-  } catch (error) {
-    console.error("Failed to sync data to Google Drive:", error);
-  }
-}
+import { syncDataToDrive } from './utils/drive';
 
 // Define categories to track
 const CATEGORIES = {
