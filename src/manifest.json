@@ -3,7 +3,7 @@
   "name": "Mental Health Check-In Assistant",
   "version": "1.0",
   "description": "A privacy-centric mental health check-in assistant.",
-  "permissions": ["identity", "storage", "scripting"],
+  "permissions": ["identity", "storage", "scripting", "sidePanel", "activeTab", "tabs"],
   "background": {
     "service_worker": "background.ts",
     "type": "module"
@@ -16,10 +16,6 @@
   ],
   "action": {
     "default_popup": "index.html"
-  },
-  "sidebar_action": {
-    "default_panel": "sidebar.html",
-    "default_title": "Browsing Data Sidebar"
   },
   "oauth2": {
     "client_id": "1020926222372-8qfb9t4j3vtvopc19kaehupgmk5s6ijm.apps.googleusercontent.com",
