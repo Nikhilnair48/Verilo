@@ -1,22 +1,6 @@
-import { openDatabase, BrowsingData } from "./db/database";
 import { uploadToGoogleDrive } from "./utils/drive";
 
 // Function to retrieve browsing data from IndexedDB
-async function retrieveBrowsingData(): Promise<BrowsingData[]> {
-  const db = await openDatabase();
-  const transaction = db.transaction("browsingData", "readonly");
-  const store = transaction.objectStore("browsingData");
-
-  return new Promise((resolve, reject) => {
-    const request = store.getAll();
-    request.onsuccess = () => {
-      resolve(request.result as BrowsingData[]);
-    };
-    request.onerror = () => {
-      reject("Failed to retrieve browsing data from IndexedDB");
-    };
-  });
-}
 
 // Function to handle data encryption and upload to Google Drive
 async function syncDataToDrive() {
