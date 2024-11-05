@@ -8,6 +8,7 @@
   "dependencies": {
     "@types/chrome": "^0.0.280",
     "crypto-js": "^4.2.0",
+    "idb": "^8.0.0",
     "typescript": "^5.6.3"
   }
 }
