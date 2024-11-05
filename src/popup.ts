@@ -1,6 +1,7 @@
 import { openDatabase, BrowsingData } from "./db/database";
 import { encryptData } from "./utils/encryption";
 import { uploadToGoogleDrive } from "./utils/drive";
+import { syncDataToDrive } from "./utils/drive";
 
 // Function to securely retrieve or generate an encryption key for AES-GCM encryption
 async function getEncryptionKey(): Promise<CryptoKey> {
@@ -69,7 +70,7 @@ async function syncToDrive() {
 }
 
 // Set up the event listener for the "Sync to Drive" button
-document.getElementById("syncButton")?.addEventListener("click", syncToDrive);
+document.getElementById("syncButton")?.addEventListener("click", syncDataToDrive);
 
 // Display the activity summary on popup load
 displayActivitySummary();
