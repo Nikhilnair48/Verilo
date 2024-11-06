@@ -101,8 +101,23 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
+// Listen for visibility changes from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.command === "syncToDrive") {
+  if (message.action === "visibilityChanged") {
+    if (message.state === "hidden") {
+      stopTracking();
+    } else if (message.state === "visible" && trackingCategory && trackingDomainId) {
+      startTracking(sender.tab?.id!, trackingCategory, trackingDomainId);
+    }
+  } else if (message.action === 'getBrowsingData') {
+      try {
+        getBrowsingDataByDate(new Date().toISOString().split("T")[0]).then((data) => sendResponse(data));
+      } catch (error) {
+        console.error("Error fetching browsing data:", error);
+        sendResponse([]); // Send an empty array on error
+      }
+      return true;
+  } else if (message.command === "syncToDrive") {
     syncDataToDrive()
       .then(() => sendResponse({ status: "success" }))
       .catch(() => sendResponse({ status: "failure" }));
