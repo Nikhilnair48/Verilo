@@ -1,4 +1,3 @@
-import { openDatabase, BrowsingData } from "./db/database";
 import { syncDataToDrive } from "./utils/drive";
 
 // Function to format time for display in hours and minutes
@@ -10,28 +9,30 @@ function formatTime(seconds: number): string {
 
 // Function to display the browsing activity summary from IndexedDB
 async function displayActivitySummary() {
+  console.log("displayActivitySummary");
+  const tableBody = document.getElementById("activitySummary");
+  if (!tableBody) return;
+
+  // Request data from the background script
   try {
-    const db = await openDatabase();
-    if(db) {
-      const transaction = db.transaction("browsingData", "readonly");
-      const store = transaction.objectStore("browsingData");
-  
-      // Use async/await to get all data directly
-      const data = await store.getAll() as BrowsingData[];
-  
-      const tableBody = document.getElementById("activitySummary");
-  
-      if (tableBody) {
+    chrome.runtime.sendMessage({ action: 'getBrowsingData' }, function(data) {
+      console.log("Data received from background:", data);
+      if (data && data.length > 0) {
         tableBody.innerHTML = data
-          .map(entry => {
-            const timeSpent = formatTime(entry.duration); // Assuming 'duration' field is used instead of 'timeSpent'
-            return `<tr><td>${entry.domainId}</td><td>${timeSpent}</td></tr>`; // Replaced 'url' with 'domainId'
+          .map((entry: { duration: number; domainId: string }) => {
+            const timeSpent = formatTime(entry.duration);
+            return `<tr><td>${entry.domainId}</td><td>${timeSpent}</td></tr>`;
           })
           .join("");
+      } else {
+        tableBody.innerHTML = "<tr><td colspan='2'>No data available</td></tr>";
       }
-    }
+    });
+
+
   } catch (error) {
-    console.error("Failed to display activity summary:", error);
+    console.error("Failed to retrieve browsing data:", error);
+    tableBody.innerHTML = "<tr><td colspan='2'>Error loading data</td></tr>";
   }
 }
 
@@ -39,4 +40,6 @@ async function displayActivitySummary() {
 document.getElementById("syncButton")?.addEventListener("click", syncDataToDrive);
 
 // Display the activity summary on popup load
-displayActivitySummary();
+document.addEventListener("DOMContentLoaded", () => {
+  displayActivitySummary();
+});
