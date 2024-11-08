@@ -1,4 +1,5 @@
 import { addDomainInfo, getBrowsingDataByDate, saveBrowsingData } from './db/database';
+import { categorizeDomain } from './utils/categorize';
 import { syncDataToDrive } from './utils/drive';
 
 const CATEGORIES = {
@@ -87,19 +88,47 @@ async function saveCurrentDuration(duration: number) {
   }
 }
 
+// chrome.tabs.onActivated.addListener(async (activeInfo) => {
+//   console.log("onActivated background");
+//   const tab = await chrome.tabs.get(activeInfo.tabId);
+//   const categoryData = tab.url ? determineCategory(tab.url) : null;
+
+//   if (categoryData) {
+//     const { category, domainId } = categoryData;
+//     await addDomainInfo(getDomain(tab.url!), category, [category]);
+//     await startTracking(activeInfo.tabId, category, domainId);
+//   } else {
+//     await stopTracking();
+//   }
+// });
+
+async function handleDomainCategorization(domain: string) {
+  try {
+    const result = await categorizeDomain(domain);
+    if (result) {
+      await addDomainInfo(domain, result.category, result.subcategories);
+    } else {
+      // Fallback if categorization fails
+      await addDomainInfo(domain, "Uncategorized", []);
+    }
+  } catch (error) {
+    console.error("Failed to categorize domain:", error);
+  }
+}
+
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  console.log("onActivated background");
   const tab = await chrome.tabs.get(activeInfo.tabId);
   const categoryData = tab.url ? determineCategory(tab.url) : null;
 
   if (categoryData) {
     const { category, domainId } = categoryData;
-    await addDomainInfo(getDomain(tab.url!), category, [category]);
+    await handleDomainCategorization(getDomain(tab.url!));
     await startTracking(activeInfo.tabId, category, domainId);
   } else {
     await stopTracking();
   }
 });
+
 
 // Listen for visibility changes from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
