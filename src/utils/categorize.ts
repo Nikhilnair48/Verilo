@@ -5,7 +5,7 @@ const OPENAI_PROJECT_ID = import.meta.env.VITE_OPENAI_PROJECT_ID;
 const OPENAI_ORGANIZATION_ID = import.meta.env.VITE_OPENAI_ORGANIZATION_ID;
 
 // Setup OpenAI API Client
-const openai = new OpenAI({
+export const openai = new OpenAI({
     apiKey: OPENAI_API_KEY,
     organization: OPENAI_ORGANIZATION_ID,
     project: OPENAI_PROJECT_ID,
@@ -67,7 +67,7 @@ export async function categorizeDomain(domain: string): Promise<{ category: stri
 }
 
 // Helper function to parse JSON response from AI API
-function parseAIPromptResponse(response: string): { category: string, subcategories: string[], tags: string[] } | null {
+export function parseAIPromptResponse(response: string): { category: string, subcategories: string[], tags: string[] } | null {
   try {
     const data = JSON.parse(response);
     return {
