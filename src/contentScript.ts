@@ -88,5 +88,40 @@ window.addEventListener("beforeunload", () => {
   stopTracking();
 });
 
+async function checkChromeAIApi() {
+  try {
+    const { available } = await (window as any).ai.languageModel.capabilities();
+    const chromeAIApiAvailable = available !== "no";
+    
+    // Store the availability in Chrome storage
+    await chrome.storage.local.set({ chromeAIApiAvailable });
+  } catch (error) {
+    console.error("Chrome AI API check failed:", error);
+    await chrome.storage.local.set({ chromeAIApiAvailable: false });
+  }
+}
+
+checkChromeAIApi();
+
 // Call restoreTrackingState on load to restore previous tracking if any
 restoreTrackingState();
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'categorizeWithChromeAI') {
+    try {
+      (window as any).ai.languageModel.create()
+        .then((session: any) => {
+          session.prompt(message.prompt);
+          session.destroy();
+        })
+        .then((result: any) => sendResponse(result));
+      // const result = await ;
+      // session.destroy();
+      // sendResponse(result);
+    } catch (error) {
+      console.error("Error with Chrome AI categorization:", error);
+      sendResponse(null);
+    }
+  }
+  return true;
+});
