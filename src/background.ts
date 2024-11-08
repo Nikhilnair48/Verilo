@@ -1,5 +1,6 @@
 import { addDomainInfo, getBrowsingDataByDate, saveBrowsingData } from './db/database';
-import { categorizeDomain } from './utils/categorize';
+import { openai, parseAIPromptResponse } from './utils/categorize';
+import { generatePrompt } from './utils/constants';
 import { syncDataToDrive } from './utils/drive';
 
 const CATEGORIES = {
@@ -113,7 +114,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         getBrowsingDataByDate(new Date().toISOString().split("T")[0]).then((data) => sendResponse(data));
       } catch (error) {
         console.error("Error fetching browsing data:", error);
-        sendResponse([]); // Send an empty array on error
+        sendResponse([]);
       }
       return true;
   } else if (message.command === "syncToDrive") {
@@ -123,3 +124,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+async function isChromeAIApiAvailable() {
+  const { chromeAIApiAvailable } = await chrome.storage.local.get("chromeAIApiAvailable");
+  return chromeAIApiAvailable || false;
+}
+
+export async function categorizeDomain(domain: string) {
+  const chromeAIApiAvailable = await isChromeAIApiAvailable();
+  const prompt = generatePrompt(domain);
+
+  if (chromeAIApiAvailable) {
+    try {
+      // Send a message to the content script to categorize the domain using Chrome AI API
+      const result: string = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { action: 'categorizeWithChromeAI', prompt },
+          (response) => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(response);
+          }
+        );
+      });
+      return parseAIPromptResponse(result);
+    } catch (error) {
+      console.error("Chrome AI categorization failed:", error);
+    }
+  }
+
+  // Fallback to OpenAI if Chrome AI API is unavailable
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: "system", content: "You are an AI assistant categorizing website content." },
+        { role: "user", content: prompt }],
+    });
+    const result = response.choices[0].message.content || '';
+    return parseAIPromptResponse(result);
+  } catch (error) {
+    console.error("OpenAI categorization failed:", error);
+    return null;
+  }
+}
