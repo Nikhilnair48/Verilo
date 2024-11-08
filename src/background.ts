@@ -72,36 +72,6 @@ async function stopTracking() {
   }
 }
 
-// Helper function to save duration to IndexedDB
-async function saveCurrentDuration(duration: number) {
-  console.log(`saveCurrentDuration: ${duration}`);
-  const timestamp = Date.now();
-  const date = new Date(timestamp).toISOString().split('T')[0];
-  if (trackingCategory && trackingDomainId) {
-    await saveBrowsingData({
-      id: `${date}-${trackingDomainId}`,
-      date,
-      domainId: trackingDomainId,
-      duration,
-      visitCount: 1
-    });
-  }
-}
-
-// chrome.tabs.onActivated.addListener(async (activeInfo) => {
-//   console.log("onActivated background");
-//   const tab = await chrome.tabs.get(activeInfo.tabId);
-//   const categoryData = tab.url ? determineCategory(tab.url) : null;
-
-//   if (categoryData) {
-//     const { category, domainId } = categoryData;
-//     await addDomainInfo(getDomain(tab.url!), category, [category]);
-//     await startTracking(activeInfo.tabId, category, domainId);
-//   } else {
-//     await stopTracking();
-//   }
-// });
-
 async function handleDomainCategorization(domain: string) {
   try {
     const result = await categorizeDomain(domain);
