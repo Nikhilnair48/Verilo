@@ -63,8 +63,7 @@ async function stopTracking() {
 // Restore tracking state from chrome.storage.local if available
 async function restoreTrackingState() {
   const storedData = await chrome.storage.local.get(['trackingCategory', 'trackingDomainId', 'startTime']);
-  console.log(`storedData ${JSON.stringify(storedData)}`);
-
+  
   if (storedData.trackingCategory && storedData.trackingDomainId && storedData.startTime) {
     trackingCategory = storedData.trackingCategory;
     trackingDomainId = storedData.trackingDomainId;
@@ -108,16 +107,9 @@ restoreTrackingState();
 
 async function handleCategorizeWithChromeAI(message: any) {
   try {
-    /*
-      (window as any).ai.languageModel.create()
-      .then((session: any) => { session.prompt(message.prompt); })
-      .then((result: any) => sendResponse(result))
-    */
     const session = await (window as any).ai.languageModel.create();
     const result = await session.prompt(message.prompt);
     session.destroy();
-    console.log("result");
-    console.log(result);
     return result;
   } catch (error) {
     console.error("Error with Chrome AI categorization:", error);
@@ -126,15 +118,8 @@ async function handleCategorizeWithChromeAI(message: any) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log("categorizeWithChromeAI");
   if (message.action === 'categorizeWithChromeAI') {
-    console.log("Received categorizeWithChromeAI message in contentScript");
-    handleCategorizeWithChromeAI(message)
-      .then((response) => {
-        console.log("response");
-        console.log(response);
-        sendResponse(response);
-      });
-      return true;
+    handleCategorizeWithChromeAI(message).then((response) => { sendResponse(response); });
+    return true;
   }
 });

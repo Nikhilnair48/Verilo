@@ -117,20 +117,15 @@ async function categorizeAndHandleTracking(activeInfo: any) {
   const domain = tab.url ? getDomain(tab.url) : null;
 
   if (domain) {
-    console.log("domain");
-    console.log(domain);
     // Check if the domain already exists in the database
     const db = await openDatabase();
     const existingDomain = await db?.get('domainInfo', domain);
-    console.log(existingDomain);
     if (existingDomain) {
       // If the domain exists, use the existing category and track browsing
       await startTracking(activeInfo.tabId, existingDomain.category, domain);
     } else {
       // If the domain is new, use AI to categorize and then store it in the database
       const categoryData = await categorizeDomain(domain);
-      console.log("categoryData");
-      console.log(categoryData);
       if (categoryData) {
         const { category, subcategories, tags } = categoryData;
         await addDomainInfo(domain, category, subcategories); // Store the new domain info in DB
