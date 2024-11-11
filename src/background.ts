@@ -1,12 +1,7 @@
-import { addDomainInfo, getBrowsingDataByDate, saveBrowsingData } from './db/database';
+import { addDomainInfo, getBrowsingDataByDate, openDatabase, saveBrowsingData } from './db/database';
 import { openai, parseAIPromptResponse } from './utils/categorize';
 import { generatePrompt } from './utils/constants';
 import { syncDataToDrive } from './utils/drive';
-
-const CATEGORIES = {
-  SOCIAL_MEDIA: ["facebook.com", "twitter.com", "instagram.com"],
-  NEWS: ["cnn.com", "bbc.com", "nytimes.com"]
-};
 
 // State variables for tracking
 let activeTabId: number | null = null;
@@ -17,17 +12,6 @@ let startTime: number | null = null;
 function getDomain(url: string): string {
   const { hostname } = new URL(url);
   return hostname;
-}
-
-function determineCategory(url: string): { category: string, domainId: string } | null {
-  const domain = getDomain(url);
-  for (const [category, sites] of Object.entries(CATEGORIES)) {
-    if (sites.some(site => url.includes(site))) {
-      const domainId = `${domain}-${category}`;
-      return { category, domainId };
-    }
-  }
-  return null;
 }
 
 async function startTracking(tabId: number, category: string, domainId: string) {
@@ -73,31 +57,97 @@ async function stopTracking() {
   }
 }
 
-async function handleDomainCategorization(domain: string) {
-  try {
-    const result = await categorizeDomain(domain);
-    if (result) {
-      await addDomainInfo(domain, result.category, result.subcategories);
-    } else {
-      // Fallback if categorization fails
-      await addDomainInfo(domain, "Uncategorized", []);
+async function isChromeAIApiAvailable() {
+  const { chromeAIApiAvailable } = await chrome.storage.local.get("chromeAIApiAvailable");
+  return chromeAIApiAvailable || false;
+}
+
+async function categorizeDomain(domain: string): Promise<any> {
+  
+  const chromeAIApiAvailable = await isChromeAIApiAvailable();
+  const prompt = generatePrompt(domain);
+
+  if (chromeAIApiAvailable) {
+    try {
+      // Use chrome.tabs.sendMessage to communicate with contentScript on a specific tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      console.log(activeTab);
+      if (activeTab && activeTab.id !== undefined) {  
+        return new Promise((resolve, reject) => {
+          chrome.tabs.sendMessage(
+            activeTab.id!,
+            { action: 'categorizeWithChromeAI', prompt },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                console.error("Error sending message to content script:", chrome.runtime.lastError.message);
+                reject(chrome.runtime.lastError);
+              } else {
+                resolve(parseAIPromptResponse(response));
+              }
+            }
+          );
+        });
+      } else {
+        console.warn("No active tab found.");
+        return null;
+      }
+    } catch (error) {
+      console.error("Chrome AI categorization failed:", error);
     }
+  }
+
+  // Fallback to OpenAI if Chrome AI API is unavailable
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: "system", content: "You are an AI assistant categorizing website content." },
+        { role: "user", content: prompt }],
+    });
+    const result = response.choices[0].message.content || '';
+    return parseAIPromptResponse(result);
   } catch (error) {
-    console.error("Failed to categorize domain:", error);
+    console.error("OpenAI categorization failed:", error);
+    return null;
   }
 }
 
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
+async function categorizeAndHandleTracking(activeInfo: any) {
   const tab = await chrome.tabs.get(activeInfo.tabId);
-  const categoryData = tab.url ? determineCategory(tab.url) : null;
+  const domain = tab.url ? getDomain(tab.url) : null;
 
-  if (categoryData) {
-    const { category, domainId } = categoryData;
-    await handleDomainCategorization(getDomain(tab.url!));
-    await startTracking(activeInfo.tabId, category, domainId);
+  if (domain) {
+    console.log("domain");
+    console.log(domain);
+    // Check if the domain already exists in the database
+    const db = await openDatabase();
+    const existingDomain = await db?.get('domainInfo', domain);
+    console.log(existingDomain);
+    if (existingDomain) {
+      // If the domain exists, use the existing category and track browsing
+      await startTracking(activeInfo.tabId, existingDomain.category, domain);
+    } else {
+      // If the domain is new, use AI to categorize and then store it in the database
+      const categoryData = await categorizeDomain(domain);
+      console.log("categoryData");
+      console.log(categoryData);
+      if (categoryData) {
+        const { category, subcategories, tags } = categoryData;
+        await addDomainInfo(domain, category, subcategories); // Store the new domain info in DB
+        await startTracking(activeInfo.tabId, category, domain); // Start tracking with new category data
+      } else {
+        console.warn("Failed to categorize domain:", domain);
+        await stopTracking(); // Stop tracking if categorization fails
+      }
+    }
   } else {
     await stopTracking();
   }
+}
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  categorizeAndHandleTracking(activeInfo);
+  return true;
 });
 
 
@@ -124,46 +174,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
-
-async function isChromeAIApiAvailable() {
-  const { chromeAIApiAvailable } = await chrome.storage.local.get("chromeAIApiAvailable");
-  return chromeAIApiAvailable || false;
-}
-
-export async function categorizeDomain(domain: string) {
-  const chromeAIApiAvailable = await isChromeAIApiAvailable();
-  const prompt = generatePrompt(domain);
-
-  if (chromeAIApiAvailable) {
-    try {
-      // Send a message to the content script to categorize the domain using Chrome AI API
-      const result: string = await new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage(
-          { action: 'categorizeWithChromeAI', prompt },
-          (response) => {
-            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
-            else resolve(response);
-          }
-        );
-      });
-      return parseAIPromptResponse(result);
-    } catch (error) {
-      console.error("Chrome AI categorization failed:", error);
-    }
-  }
-
-  // Fallback to OpenAI if Chrome AI API is unavailable
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: "system", content: "You are an AI assistant categorizing website content." },
-        { role: "user", content: prompt }],
-    });
-    const result = response.choices[0].message.content || '';
-    return parseAIPromptResponse(result);
-  } catch (error) {
-    console.error("OpenAI categorization failed:", error);
-    return null;
-  }
-}
