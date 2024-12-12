@@ -111,7 +111,7 @@ export async function addDomainInfo(domain: string, category: string, subcategor
 }
 
 // Save browsing data with aggregation
-export async function saveBrowsingData({ id, date, domainId, duration, visitCount }: BrowsingData) {
+export async function saveBrowsingData({ id, date, domainId, duration, sessionId, visitCount }: BrowsingData) {
   try {
     const db = await openDatabase();
     if(db) {
