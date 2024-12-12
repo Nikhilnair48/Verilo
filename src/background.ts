@@ -1,4 +1,4 @@
-import { addDomainInfo, getBrowsingDataByDate, openDatabase, saveBrowsingData } from './db/database';
+import { addDomainInfo, closeSession, createSession, getBrowsingDataByDate, openDatabase, saveBrowsingData } from './db/database';
 import { openai, parseAIPromptResponse } from './utils/categorize';
 import { generatePrompt } from './utils/constants';
 import { syncDataToDrive } from './utils/drive';
@@ -19,11 +19,14 @@ async function startTracking(tabId: number, category: string, domainId: string) 
     // Stop previous tracking if a new tab or domain is being tracked
     await stopTracking();
 
+    // Create a new session for the domain
+    const sessionId = await createSession(domainId);
+
     trackingCategory = category;
     trackingDomainId = domainId;
     startTime = Date.now();
 
-    chrome.storage.local.set({ trackingCategory, trackingDomainId, startTime });
+    chrome.storage.local.set({ trackingCategory, trackingDomainId, sessionId, startTime });
     activeTabId = tabId;
 
     console.log(`Started tracking ${domainId} in ${category}`);
@@ -36,14 +39,19 @@ async function stopTracking() {
     const duration = Math.floor((Date.now() - startTime) / 1000);
 
     // Save duration data to centralized IndexedDB
+    const sessionId = await chrome.storage.local.get('sessionId') as string;
     const today = new Date(startTime).toISOString().split("T")[0];
+
     await saveBrowsingData({
       id: `${today}-${trackingDomainId}`,
       date: today,
       domainId: trackingDomainId,
+      sessionId,
       duration,
       visitCount: 1
     });
+
+    await closeSession(sessionId);
 
     console.log(`Stopped tracking ${trackingDomainId} in ${trackingCategory} with duration ${duration} seconds`);
 
@@ -53,7 +61,7 @@ async function stopTracking() {
     startTime = null;
     activeTabId = null;
 
-    chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime"]);
+    chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime", "sessionId"]);
   }
 }
 
@@ -144,7 +152,6 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
   categorizeAndHandleTracking(activeInfo);
   return true;
 });
-
 
 // Listen for visibility changes from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
