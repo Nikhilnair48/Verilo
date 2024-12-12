@@ -11,6 +11,15 @@ export interface BrowsingData {
   domainId: string;          // Foreign key to DomainInfo
   duration: number;          // Total time spent on this domain on this date (seconds)
   visitCount: number;        // Number of times user switched to this domain within the date
+  sessionId: string;
+}
+
+export interface SessionData {
+  sessionId: string;        // Unique session ID
+  domainId: string;         // Foreign key linking to BrowsingData
+  startTime: number;        // Session start timestamp (epoch time)
+  endTime: number | null;   // Session end timestamp (null if ongoing)
+  duration: number;         // Total session duration (in seconds)
 }
 
 export interface DomainInfo {
