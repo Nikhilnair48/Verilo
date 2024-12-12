@@ -48,6 +48,48 @@ export const openDatabase = async () => {
   }
 };
 
+// Add a function to create a new session
+export async function createSession(domainId: string): Promise<string> {
+  const db = await openDatabase();
+  const sessionId = `${domainId}-${Date.now()}`;
+  const sessionData: SessionData = {
+    sessionId,
+    domainId,
+    startTime: Date.now(),
+    endTime: null,
+    duration: 0,
+  };
+  if(db) {
+    await db.put('sessionData', sessionData);
+  }
+  return sessionId;
+}
+
+// Add a function to update session duration
+export async function updateSessionDuration(sessionId: string): Promise<void> {
+  const db = await openDatabase();
+  if(db) {
+    const session = await db.get('sessionData', sessionId);
+    if (session) {
+      session.duration = Math.floor((Date.now() - session.startTime) / 1000);
+        await db.put('sessionData', session);
+    }
+  }
+}
+
+// Add a function to close a session
+export async function closeSession(sessionId: string): Promise<void> {
+  const db = await openDatabase();
+  if(db) {
+    const session = await db.get('sessionData', sessionId);
+    if (session) {
+      session.endTime = Date.now();
+      session.duration = Math.floor((session.endTime - session.startTime) / 1000);
+        await db.put('sessionData', session);
+    }
+  }
+}
+
 // Add or update domain information
 export async function addDomainInfo(domain: string, category: string, subcategories: string[]): Promise<string | null> {
   try {
