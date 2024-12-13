@@ -1,4 +1,5 @@
 import { addDomainInfo, closeSession, createSession, getBrowsingDataByDate, openDatabase, saveBrowsingData } from './db/database';
+import { getTrackingState, updateTrackingState } from './utils/cache';
 import { openai, parseAIPromptResponse } from './utils/categorize';
 import { generatePrompt } from './utils/constants';
 import { syncDataToDrive } from './utils/drive';
@@ -42,7 +43,7 @@ async function startTracking(tabId: number, category: string, domainId: string) 
       trackingDomainId = domainId;
       startTime = Date.now();
   
-      chrome.storage.local.set({ trackingCategory, trackingDomainId, sessionId, startTime });
+      updateTrackingState({ trackingCategory, trackingDomainId, sessionId, startTime });
       activeTabId = tabId;
   
       console.log(`Started tracking ${domainId} in ${category}`);
@@ -57,30 +58,33 @@ async function stopTracking() {
       const duration = Math.floor((Date.now() - startTime) / 1000);
   
       // Save duration data to centralized IndexedDB
-      const sessionId = await chrome.storage.local.get('sessionId') as string;
+      const sessionId = await getTrackingState("sessionId");
       const today = new Date(startTime).toISOString().split("T")[0];
-  
-      await saveBrowsingData({
-        id: `${today}-${trackingDomainId}`,
-        date: today,
-        domainId: trackingDomainId,
-        sessionId,
-        duration,
-        visitCount: 1
-      });
-  
-      await closeSession(sessionId);
-  
-      console.log(`Stopped tracking ${trackingDomainId} in ${trackingCategory} with duration ${duration} seconds`);
-  
-      // Reset tracking variables
-      trackingCategory = null;
-      trackingDomainId = null;
-      startTime = null;
-      activeTabId = null;
-      clearTimeout(sessionExpiryTimeout);
-  
-      chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime", "sessionId"]);
+      if(sessionId) {
+        await saveBrowsingData({
+          id: `${today}-${trackingDomainId}`,
+          date: today,
+          domainId: trackingDomainId,
+          sessionId,
+          duration,
+          visitCount: 1
+        });
+    
+        await closeSession(sessionId);
+    
+        console.log(`Stopped tracking ${trackingDomainId} in ${trackingCategory} with duration ${duration} seconds`);
+    
+        // Reset tracking variables
+        trackingCategory = null;
+        trackingDomainId = null;
+        startTime = null;
+        activeTabId = null;
+        clearTimeout(sessionExpiryTimeout);
+    
+        updateTrackingState({});
+      } else {
+        throw new Error("Stop tracking failed. Invalid sessionId.")
+      }
     }
   });
 }
