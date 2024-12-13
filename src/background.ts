@@ -8,6 +8,7 @@ let activeTabId: number | null = null;
 let trackingCategory: string | null = null;
 let trackingDomainId: string | null = null;
 let startTime: number | null = null;
+let sessionExpiryTimeout: NodeJS.Timeout;
 
 function getDomain(url: string): string {
   const { hostname } = new URL(url);
@@ -60,6 +61,7 @@ async function stopTracking() {
     trackingDomainId = null;
     startTime = null;
     activeTabId = null;
+    clearTimeout(sessionExpiryTimeout);
 
     chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime", "sessionId"]);
   }
@@ -157,7 +159,9 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "visibilityChanged") {
     if (message.state === "hidden") {
-      stopTracking();
+      sessionExpiryTimeout = setTimeout(async () => {
+        await stopTracking();
+      }, 2 * 60 * 1000);  // 2 minutes of inactivity
     } else if (message.state === "visible" && trackingCategory && trackingDomainId) {
       startTracking(sender.tab?.id!, trackingCategory, trackingDomainId);
     }
