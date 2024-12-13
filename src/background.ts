@@ -9,62 +9,80 @@ let trackingCategory: string | null = null;
 let trackingDomainId: string | null = null;
 let startTime: number | null = null;
 let sessionExpiryTimeout: NodeJS.Timeout;
+let sessionLock = false;
 
 function getDomain(url: string): string {
   const { hostname } = new URL(url);
   return hostname;
 }
 
-async function startTracking(tabId: number, category: string, domainId: string) {
-  if (activeTabId !== tabId || trackingCategory !== category || trackingDomainId !== domainId) {
-    // Stop previous tracking if a new tab or domain is being tracked
-    await stopTracking();
-
-    // Create a new session for the domain
-    const sessionId = await createSession(domainId);
-
-    trackingCategory = category;
-    trackingDomainId = domainId;
-    startTime = Date.now();
-
-    chrome.storage.local.set({ trackingCategory, trackingDomainId, sessionId, startTime });
-    activeTabId = tabId;
-
-    console.log(`Started tracking ${domainId} in ${category}`);
+async function withSessionLock(callback: () => Promise<void>) {
+  if(sessionLock) {
+    console.warn("Session lock active; operation skipped");
+    return;
   }
+  sessionLock = true;
+  try {
+    await callback();
+  } catch(ex) {
+    sessionLock = false;
+  }
+}
+
+async function startTracking(tabId: number, category: string, domainId: string) {
+  await withSessionLock(async () => {
+    if (activeTabId !== tabId || trackingCategory !== category || trackingDomainId !== domainId) {
+      // Stop previous tracking if a new tab or domain is being tracked
+      await stopTracking();
+  
+      // Create a new session for the domain
+      const sessionId = await createSession(domainId);
+  
+      trackingCategory = category;
+      trackingDomainId = domainId;
+      startTime = Date.now();
+  
+      chrome.storage.local.set({ trackingCategory, trackingDomainId, sessionId, startTime });
+      activeTabId = tabId;
+  
+      console.log(`Started tracking ${domainId} in ${category}`);
+    }
+  });
 }
 
 // Function to start tracking for the specified domain and category
 async function stopTracking() {
-  if (trackingCategory && trackingDomainId && startTime) {
-    const duration = Math.floor((Date.now() - startTime) / 1000);
-
-    // Save duration data to centralized IndexedDB
-    const sessionId = await chrome.storage.local.get('sessionId') as string;
-    const today = new Date(startTime).toISOString().split("T")[0];
-
-    await saveBrowsingData({
-      id: `${today}-${trackingDomainId}`,
-      date: today,
-      domainId: trackingDomainId,
-      sessionId,
-      duration,
-      visitCount: 1
-    });
-
-    await closeSession(sessionId);
-
-    console.log(`Stopped tracking ${trackingDomainId} in ${trackingCategory} with duration ${duration} seconds`);
-
-    // Reset tracking variables
-    trackingCategory = null;
-    trackingDomainId = null;
-    startTime = null;
-    activeTabId = null;
-    clearTimeout(sessionExpiryTimeout);
-
-    chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime", "sessionId"]);
-  }
+  await withSessionLock(async () => {
+    if (trackingCategory && trackingDomainId && startTime) {
+      const duration = Math.floor((Date.now() - startTime) / 1000);
+  
+      // Save duration data to centralized IndexedDB
+      const sessionId = await chrome.storage.local.get('sessionId') as string;
+      const today = new Date(startTime).toISOString().split("T")[0];
+  
+      await saveBrowsingData({
+        id: `${today}-${trackingDomainId}`,
+        date: today,
+        domainId: trackingDomainId,
+        sessionId,
+        duration,
+        visitCount: 1
+      });
+  
+      await closeSession(sessionId);
+  
+      console.log(`Stopped tracking ${trackingDomainId} in ${trackingCategory} with duration ${duration} seconds`);
+  
+      // Reset tracking variables
+      trackingCategory = null;
+      trackingDomainId = null;
+      startTime = null;
+      activeTabId = null;
+      clearTimeout(sessionExpiryTimeout);
+  
+      chrome.storage.local.remove(["trackingCategory", "trackingDomainId", "startTime", "sessionId"]);
+    }
+  });
 }
 
 async function isChromeAIApiAvailable() {
