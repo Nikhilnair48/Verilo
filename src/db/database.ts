@@ -11,6 +11,15 @@ export interface BrowsingData {
   domainId: string;          // Foreign key to DomainInfo
   duration: number;          // Total time spent on this domain on this date (seconds)
   visitCount: number;        // Number of times user switched to this domain within the date
+  sessionId: string;
+}
+
+export interface SessionData {
+  sessionId: string;        // Unique session ID
+  domainId: string;         // Foreign key linking to BrowsingData
+  startTime: number;        // Session start timestamp (epoch time)
+  endTime: number | null;   // Session end timestamp (null if ongoing)
+  duration: number;         // Total session duration (in seconds)
 }
 
 export interface DomainInfo {
@@ -31,6 +40,8 @@ export const openDatabase = async () => {
   
         const domainStore = db.createObjectStore('domainInfo', { keyPath: 'domainId' });
         domainStore.createIndex('domain', 'domain');
+        const sessionStore = db.createObjectStore('sessionData', { keyPath: 'sessionId' });
+        sessionStore.createIndex('sessionId', 'sessionId');
       },
     });
   } catch(err) {
@@ -39,8 +50,53 @@ export const openDatabase = async () => {
   }
 };
 
+// Add a function to create a new session
+export async function createSession(domainId: string): Promise<string> {
+  const db = await openDatabase();
+  const sessionId = `${domainId}-${Date.now()}`;
+  const sessionData: SessionData = {
+    sessionId,
+    domainId,
+    startTime: Date.now(),
+    endTime: null,
+    duration: 0,
+  };
+  if(db) {
+    await db.put('sessionData', sessionData);
+    return sessionId;
+  }
+  throw new Error("Db not available");
+}
+
+// Add a function to update session duration
+export async function updateSessionDuration(sessionId: string): Promise<void> {
+  const db = await openDatabase();
+  if(db) {
+    const session = await db.get('sessionData', sessionId);
+    if (session) {
+      session.duration = Math.floor((Date.now() - session.startTime) / 1000);
+        await db.put('sessionData', session);
+    }
+  }
+  throw new Error("Db not available");
+}
+
+// Add a function to close a session
+export async function closeSession(sessionId: string): Promise<void> {
+  const db = await openDatabase();
+  if(db) {
+    const session = await db.get('sessionData', sessionId);
+    if (session) {
+      session.endTime = Date.now();
+      session.duration = Math.floor((session.endTime - session.startTime) / 1000);
+        await db.put('sessionData', session);
+    }
+  }
+  throw new Error("Db not available");
+}
+
 // Add or update domain information
-export async function addDomainInfo(domain: string, category: string, subcategories: string[]): Promise<string | null> {
+export async function addDomainInfo(domain: string, category: string, subcategories: string[]): Promise<string> {
   try {
     const db = await openDatabase();
     if(db) {
@@ -52,32 +108,32 @@ export async function addDomainInfo(domain: string, category: string, subcategor
       }
       return domainId;
     }
-    return null;
+    throw new Error("Db not available");
   } catch(err) {
     console.log(err);
-    return null;
+    throw new Error("Error: addDomainInfo");
   }
 }
 
 // Save browsing data with aggregation
-export async function saveBrowsingData({ id, date, domainId, duration, visitCount }: BrowsingData) {
+export async function saveBrowsingData({ id, date, domainId, duration, sessionId, visitCount }: BrowsingData) {
   try {
     const db = await openDatabase();
     if(db) {
       const existing = await db.get('browsingData', id);
     
-      if (existing) {
+      if (existing && existing.sessionId === sessionId) {
         existing.duration += duration;
         existing.visitCount += visitCount;
         await db.put('browsingData', existing);
       } else {
-        await db.put('browsingData', { id, date, domainId, duration, visitCount });
+        await db.put('browsingData', { id, date, domainId, duration, visitCount, sessionId });
       }
     }
-    return null;
+    throw new Error("Db not available");
   } catch(err) {
     console.log(err);
-    return null;
+    throw new Error("Error: saveBrowsingData");
   }
 }
 
@@ -88,9 +144,9 @@ export async function getBrowsingDataByDate(date: string): Promise<BrowsingData[
     if(db) {
       return await db.getAllFromIndex('browsingData', 'date', date);
     }
-    return null;
+    throw new Error("Db not available");
   } catch(err) {
     console.log(err);
-    return null;
+    throw new Error("Error: getBrowsingDataByDate");
   }
 }
