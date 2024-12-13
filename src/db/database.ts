@@ -40,6 +40,8 @@ export const openDatabase = async () => {
   
         const domainStore = db.createObjectStore('domainInfo', { keyPath: 'domainId' });
         domainStore.createIndex('domain', 'domain');
+        const sessionStore = db.createObjectStore('sessionData', { keyPath: 'sessionId' });
+        sessionStore.createIndex('sessionId', 'sessionId');
       },
     });
   } catch(err) {
